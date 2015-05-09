@@ -1,0 +1,116 @@
+<html>
+	<head>
+		<title>My first Three.js app</title>
+		<style>
+			body { margin: 0; }
+			canvas { width: 100%; height: 100% ; background-color: #FF0000}
+		</style>
+	</head>
+	<body>
+		<script src="bower_components/threejs/build/three.min.js"></script>
+		<script>
+			var scene = new THREE.Scene();
+			var camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+
+			var renderer = new THREE.WebGLRenderer();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			// renderer.setClearColor(0xe70000, 1); 
+			renderer.setClearColor(0xFFFFFF, 1); 
+			renderer.shadowMapEnabled = true;
+
+			document.body.appendChild( renderer.domElement );
+
+
+			var material1 = new THREE.MeshBasicMaterial( { color: "rgb(166,157,129)", wireframe:false,	opacity:0.5,
+			transparent:true , side: THREE.DoubleSide});
+		
+			
+				var material2 = new THREE.MeshBasicMaterial( { color: "rgb(242,228,201)", wireframe:false,	opacity:0.5,
+			transparent:true });
+
+					var material3 = new THREE.MeshBasicMaterial( { color: "rgb(217,202,176)", wireframe:false,	opacity:0.5,
+			transparent:true });
+
+			var geometry = new THREE.BoxGeometry( 3, 3, 3 );
+
+			var geometryX = new THREE.RingGeometry(1.9, 3, 200, 5, 0, Math.PI / .3 );
+
+			var geometryY = new THREE.RingGeometry(1,1.8, 200, 5, 0, Math.PI / .3 );
+
+			var geometryZ = new THREE.RingGeometry(1,2.5, 200, 5, 0, Math.PI / .3 );
+
+			var ringGeometry = new THREE.RingGeometry(2,3,50);
+			// ringGeometry.thetaStart = 0;
+			ringGeometry.thetaLength = Math.PI * 0.5 ;
+
+
+			ringGeometry.thetaStart = 0.3 * Math.PI * 2;
+            ringGeometry.thetaLength = 0.3 * Math.PI * 2;
+            ringGeometry.segments = 10;
+
+
+		
+			var cube1 = new THREE.Mesh( geometryX, material1 );
+			var cube2 = new THREE.Mesh( geometryY, material2 );
+			var cube3 = new THREE.Mesh( geometryZ, material3 );
+
+			// cube2.translateX(.5);
+			// cube3.translateX(.3);
+
+
+			var geometry = new THREE.SphereGeometry( 20, 20, 32 );
+
+
+			
+
+
+			var sphereMaterial = new THREE.MeshBasicMaterial( { color: "rgb(239,239,239)", wireframe:false,	opacity:1,
+			transparent:true , side: THREE.DoubleSide});
+			
+			var sphere = new THREE.Mesh( geometry, sphereMaterial );
+			sphere.position.z = 10;
+			sphere.receiveShadow = true;
+			scene.add( sphere );
+
+			
+
+
+
+			scene.add( cube1 );
+			scene.add( cube2 );
+			scene.add( cube3 );
+
+
+			cube1.castShadow = true;
+			cube2.castShadow = true;
+			cube3.castShadow = true;
+
+			camera.position.z = 5;
+
+
+		
+
+        // add spotlight for the shadows
+        var spotLight = new THREE.SpotLight(0xffffff);
+        spotLight.position.set(-10, 0, -10);
+        spotLight.castShadow = true;
+        scene.add(spotLight);
+
+
+
+
+			var render = function () {
+				requestAnimationFrame( render );
+
+				cube1.rotation.z += 0.01;
+				cube2.rotation.z += -0.01;
+				// cube2.rotation.y += -0.05;
+				cube3.rotation.z += +0.03; 
+
+				renderer.render(scene, camera);
+			};
+
+			render();
+		</script>
+	</body>
+</html>

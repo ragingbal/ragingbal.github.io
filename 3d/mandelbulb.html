@@ -1,0 +1,1822 @@
+<html>
+
+<head>
+<title>The Mandelbulb</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<style type="text/css">
+
+body{
+        width:1000px;
+        background-color:#EEEEEE;
+        border-style:ridge;
+        border-width:3px;
+        border-color:#999999;
+        margin: 0px auto 0px auto;
+}
+
+table.fullbody{
+        width:100%;
+        background-color:#739BC9;       
+        padding:10px;
+}
+
+div.canvas{
+        float:left;
+        width:500px;
+        margin-left:auto;
+        margin-right:auto;
+        border-style:ridge;
+        border-width:3px;
+        border-color:#999999;
+}
+
+
+div.stats{
+        margin-left:55%;
+        width:45%;
+}
+
+div.close{
+        clear:both;
+}
+
+div.header{
+        clear:both;
+        text-align:center;
+        margin-left:auto;
+        margin-right:auto;
+}
+
+div.all{
+        float:left;
+        background-color:#739BC9;
+        width:34%;
+}
+
+div.phong{
+        float:left;
+        background-color:#739BC9;
+        width:33%;
+}
+
+div.noise{
+        float:left;
+        background-color:#739BC9;
+        width:33%;
+}
+
+div.allRight{
+        float:left;
+        width:45%;
+}
+
+div.allLeft{
+        float:left;
+        width:40%;
+}
+
+input.statBox{
+        border-width: 0px;
+        background-color: #739BC9;
+}
+
+.unchecked{
+        border: inset;
+        border-width: 2px;
+        background-color: #ffffff;
+}
+
+.checked{
+        border: none;
+        background-color: #739BC9;
+}
+
+        
+
+</style>
+
+<script type="text/javascript" src="glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="webgl-utils.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    #ifdef GL_ES
+    precision highp float;
+    #endif
+
+/** 
+ 3dmandelbrot was put together by:
+ Michael Jewell <michael.jewell@maine.edu>,  
+ Jesse Altman <jesse.altman@maine.edu>,
+ Shane Christy <shane.christy@maine.edu>,
+ Kayla Christina Artinyan <kayla.artinyan@maine.edu> from the universtiy of southern maine for Bruce Macleod's Interactive Graphics course
+ 
+ The origin of our mandelbulb equations:
+ * Mandelbulb.pbk
+ * Last update: 14 December 2009
+ *
+ * Changelog:
+ *              1.0             - Initial release
+ *              1.0.1   - Fixed a missing asymmetry thanks to Chris King (http://www.dhushara.com)
+ *                              - Refinements in the colouring
+ *      1.0.2   - Added radiolaria option for a funky hair-like effect
+ *                              - Incorporated the scalar derivative method as described here:
+ *                          - http://www.fractalforums.com/mandelbulb-implementation/realtime-renderingoptimisations/
+ *              1.0.3   - Created a quick version of the script as using a boolean flag to determine
+ *                                which distance estimation method created long compilation times.
+ *              1.0.4   - Fixed issue with older graphic cards and the specular highlights
+ *
+ *
+ * Copyright (c) 2009 Tom Beddard
+ * http://www.subblue.com
+ *
+ * For more Flash and PixelBender based generative graphics experiments see:
+ * http://www.subblue.com/blog
+ *
+ * Licensed under the MIT License:
+ * http://www.opensource.org/licenses/mit-license.php
+ *
+ *
+ * Credits and references
+ * ======================
+ * For the story behind the 3D Mandelbrot see the following page:
+ * http://www.skytopia.com/project/fractal/mandelbulb.html
+ *
+ * The original forum disussion with many implementation details can be found here:
+ * http://www.fractalforums.com/3d-fractal-generation/true-3d-mandlebrot-type-fractal/
+ *
+ * This implementation references the 4D Quaternion GPU Raytracer by Keenan Crane:
+ * http://www.devmaster.net/forums/showthread.php?t=4448
+ *
+ * and the NVIDIA CUDA/OptiX implementation by cbuchner1:
+ * http://forums.nvidia.com/index.php?showtopic=150985
+ *
+ *  -- noise provided by --
+ *The following is noise calculations are provided from
+ * Original noise Author: Stefan Gustavson ITN-LiTH (stegu@itn.liu.se) 2004-12-05
+ * Simplex indexing functions by Bill Licea-Kane, ATI
+ *
+ * You may use, modify and redistribute this code free of charge,
+ * provided that the author's names and this notice appear intact.
+ *
+ * The code was hosted at http://www.pcprogramming.com/NoiseCube.html
+ */
+
+/*
+uniform int width;
+uniform int height;
+uniform float pixelSize;
+uniform int  antialiasing;
+uniform bool  phong;
+uniform bool  julia;
+uniform bool  radiolaria;
+uniform float shadows;
+uniform float radiolariaFactor;
+uniform float ambientOcclusion;
+uniform float ambientOcclusionEmphasis;
+uniform float bounding;
+uniform float bailout;
+uniform float power;
+uniform vec2  phase;
+uniform vec3  julia_c;
+uniform vec3  camera;
+uniform vec3  cameraFine;
+uniform vec3  cameraRotation;
+uniform float cameraZoom;
+uniform vec3  light;
+uniform vec4  backgroundColor;
+uniform vec4  diffuseColor;
+uniform vec4  ambientColor;
+uniform vec4  lightColor;
+uniform float colorSpread;
+uniform float rimLight;
+uniform float specularity;
+uniform float specularExponent;
+uniform vec3  rotation;
+uniform int   maxIterations;
+uniform int   stepLimit;
+uniform float epsilonScale;
+*/
+uniform bool uJustDE;
+uniform int time;
+uniform vec3 camera;
+uniform  mat3 viewRotation;
+uniform float power;
+uniform int maxIterations; //user defined max iterations, does no good over maxIterationsLimit
+const int   maxIterationsLimit = 50;
+uniform int antialiasing;
+uniform bool julia;
+uniform bool uNoise;
+uniform bool phong;
+uniform bool normalLighting;
+uniform float colorChange;
+uniform float ambientRed;
+uniform float ambientGreen;
+uniform float ambientBlue;
+
+uniform sampler2D permTexture; //for simplex noise
+uniform bool uMarble;
+uniform float uLacunarity;
+uniform float uGain;
+uniform float uOctaves;
+  
+float ftime = float(time);      
+
+
+const int width = 500;
+const int height = 500;
+const float pixelSize = 1.0;
+//const int  antialiasing = 0;
+//const bool  phong = false;
+// bool  julia = false;
+ bool  radiolaria = false;
+const float shadows = 0.6496;
+const float radiolariaFactor = 0.0;
+const float ambientOcclusion = 0.5;
+const float ambientOcclusionEmphasis = 0.5;
+const float bounding = 1.718;
+const float bailout = 4.0;
+//float power = 8.0 + cos(ftime / 10000.0) * 4.0;
+ vec2  phase = vec2(0.0, 0.0);
+ vec3  julia_c = vec3(0.95, 0.0, 0.0);
+  // vec3  camera = vec3(1.0, 0.5, 2.0);
+ vec3  cameraFine = vec3(0.0, 0.0, 0.0);
+  //vec3  cameraRotation = vec3(-10.0, -10.0, 20.0);
+ float cameraZoom = 0.0;
+ vec3  light = vec3(100, -54.41, 27.94);
+ vec4  backgroundColor = vec4(0.0, 0.0, 0.0, 1.0);
+ vec4  diffuseColor = vec4(1.0, 0.7, 1.0, 1.0);
+ vec4  ambientColor = vec4(ambientRed*cos(colorChange*ftime/500.0), ambientGreen*cos(colorChange*ftime/600.0), ambientBlue*cos(colorChange*ftime/1000.0), 1.0);
+ vec4  lightColor = vec4(1.0, 1.0, 1.0, 1.0);
+ float colorSpread = 0.3146;
+ float rimLight = 1.0;
+ float specularity = 0.5;
+ float specularExponent = 25.0;
+
+vec3 rotation = vec3(0.0, 0.0 , 0.0); 
+const int   stepLimit = 125;
+const float epsilonScale = 1.0; 
+
+
+
+#define PI 3.141592653
+#define MIN_EPSILON 3e-7
+
+
+
+varying vec3 Position;
+
+vec2 size = vec2(float(width), float(height));
+float aspectRatio = size.x / size.y;
+
+
+// Object rotation
+float c4 = cos(radians(-rotation.x));
+float s4 = sin(radians(-rotation.x));
+mat3 objRotationY = mat3( c4, 0, s4,
+                                            0, 1, 0,
+                                          -s4, 0, c4);
+
+float c5 = cos(radians(-rotation.y));
+float s5 = sin(radians(-rotation.y));
+mat3 objRotationZ = mat3( c5, -s5, 0,
+                                           s5, c5, 0,
+                                            0, 0, 1);
+
+float c6 = cos(radians(-rotation.z));
+float s6 = sin(radians(-rotation.z));
+mat3 objRotationX = mat3( 1, 0, 0,
+                                                                   0, c6, -s6,
+                                                                   0, s6, c6);
+
+mat3 objRotation = objRotationX * objRotationY * objRotationZ;
+
+
+//eye = float3(0, 0, camera.w) * viewRotation;
+//lightSource = light * viewRotation * 100.0;
+vec3 eye = (camera + cameraFine) * objRotation;
+//if (eye == float3(0, 0, 0)) eye = float3(0, 0.0001, 0);
+
+
+// Super sampling
+float sampleStep = 1.0 / float(antialiasing);
+float sampleContribution = 1.0 / pow(float(antialiasing), 2.0);
+float pixel_scale = 1.0 / max(size.x, size.y);
+
+
+/*
+ * To create offsets of one texel and one half texel in the
+ * texture lookup, we need to know the texture image size.
+ */
+#define ONE 0.00390625
+#define ONEHALF 0.001953125
+// The numbers above are 1/256 and 0.5/256, change accordingly
+// if you change the code to use another perm/grad texture size.
+
+void simplex( const in vec3 P, out vec3 offset1, out vec3 offset2 )
+{
+  vec3 offset0;
+ 
+  vec2 isX = step( P.yz, P.xx );         // P.x >= P.y ? 1.0 : 0.0;  P.x >= P.z ? 1.0 : 0.0;
+  offset0.x  = dot( isX, vec2( 1.0 ) );  // Accumulate all P.x >= other channels in offset.x
+  offset0.yz = 1.0 - isX;                // Accumulate all P.x <  other channels in offset.yz
+
+  float isY = step( P.z, P.y );          // P.y >= P.z ? 1.0 : 0.0;
+  offset0.y += isY;                      // Accumulate P.y >= P.z in offset.y
+  offset0.z += 1.0 - isY;                // Accumulate P.y <  P.z in offset.z
+ 
+  // offset0 now contains the unique values 0,1,2 in each channel
+  // 2 for the channel greater than other channels
+  // 1 for the channel that is less than one but greater than another
+  // 0 for the channel less than other channels
+  // Equality ties are broken in favor of first x, then y
+  // (z always loses ties)
+
+  offset2 = clamp(   offset0, 0.0, 1.0 );
+  // offset2 contains 1 in each channel that was 1 or 2
+  offset1 = clamp( --offset0, 0.0, 1.0 );
+  // offset1 contains 1 in the single channel that was 1
+}
+
+
+/*
+ * 3D simplex noise. Comparable in speed to classic noise, better looking.
+ */
+float snoise(const in vec3 P) {
+
+// The skewing and unskewing factors are much simpler for the 3D case
+#define F3 0.333333333333
+#define G3 0.166666666667
+
+  // Skew the (x,y,z) space to determine which cell of 6 simplices we're in
+        float s = (P.x + P.y + P.z) * F3; // Factor for 3D skewing
+  vec3 Pi = floor(P + s);
+  float t = (Pi.x + Pi.y + Pi.z) * G3;
+  vec3 P0 = Pi - t; // Unskew the cell origin back to (x,y,z) space
+  Pi = Pi * ONE + ONEHALF; // Integer part, scaled and offset for texture lookup
+
+  vec3 Pf0 = P - P0;  // The x,y distances from the cell origin
+
+  // For the 3D case, the simplex shape is a slightly irregular tetrahedron.
+  // To find out which of the six possible tetrahedra we're in, we need to
+  // determine the magnitude ordering of x, y and z components of Pf0.
+  vec3 o1;
+  vec3 o2;
+  simplex(Pf0, o1, o2);
+
+  // Noise contribution from simplex origin
+  float perm0 = texture2D(permTexture, Pi.xy).a;
+  vec3  grad0 = texture2D(permTexture, vec2(perm0, Pi.z)).rgb * 4.0 - 1.0;
+  float t0 = 0.6 - dot(Pf0, Pf0);
+  float n0;
+  if (t0 < 0.0) n0 = 0.0;
+  else {
+    t0 *= t0;
+    n0 = t0 * t0 * dot(grad0, Pf0);
+  }
+
+  // Noise contribution from second corner
+  vec3 Pf1 = Pf0 - o1 + G3;
+  float perm1 = texture2D(permTexture, Pi.xy + o1.xy*ONE).a;
+  vec3  grad1 = texture2D(permTexture, vec2(perm1, Pi.z + o1.z*ONE)).rgb * 4.0 - 1.0;
+  float t1 = 0.6 - dot(Pf1, Pf1);
+  float n1;
+  if (t1 < 0.0) n1 = 0.0;
+  else {
+    t1 *= t1;
+    n1 = t1 * t1 * dot(grad1, Pf1);
+  }
+  
+  // Noise contribution from third corner
+  vec3 Pf2 = Pf0 - o2 + 2.0 * G3;
+  float perm2 = texture2D(permTexture, Pi.xy + o2.xy*ONE).a;
+  vec3  grad2 = texture2D(permTexture, vec2(perm2, Pi.z + o2.z*ONE)).rgb * 4.0 - 1.0;
+  float t2 = 0.6 - dot(Pf2, Pf2);
+  float n2;
+  if (t2 < 0.0) n2 = 0.0;
+  else {
+    t2 *= t2;
+    n2 = t2 * t2 * dot(grad2, Pf2);
+  }
+  
+  // Noise contribution from last corner
+  vec3 Pf3 = Pf0 - vec3(1.0-3.0*G3);
+  float perm3 = texture2D(permTexture, Pi.xy + vec2(ONE, ONE)).a;
+  vec3  grad3 = texture2D(permTexture, vec2(perm3, Pi.z + ONE)).rgb * 4.0 - 1.0;
+  float t3 = 0.6 - dot(Pf3, Pf3);
+  float n3;
+  if(t3 < 0.0) n3 = 0.0;
+  else {
+    t3 *= t3;
+    n3 = t3 * t3 * dot(grad3, Pf3);
+  }
+
+  // Sum up and scale the result to cover the range [-1,1]
+  return 32.0 * (n0 + n1 + n2 + n3);
+}
+// Ridged multifractal
+// See "Texturing & Modeling, A Procedural Approach", Chapter 12
+float ridge(float h, float offset)
+{
+    h = abs(h);
+    h = offset - h;
+    h = h * h;
+    return h;
+}
+
+float ridgedmf(vec3 p, float lacunarity, float gain, float offset, float octaves)
+{
+        float sum = 0.0;
+        float freq = 5.0, amp = 0.7;
+        float prev = 1.0;
+        for(float i=0.0 ; i < 20.0; i++) {
+        if(i > octaves){break;}
+                float noise = snoise(p*freq);
+                float n = ridge(noise, offset);
+                sum += n*amp*prev;
+                prev = n;
+                freq *= lacunarity;
+                amp *= gain;
+        }
+        return sum;
+}
+  
+float marble(vec3 p, float lacunarity, float gain, float offset, float octaves)
+  {
+    float sum = 0.0;
+    float freq = 5.0, amp = 0.7;
+    float prev = 1.0;
+    for(float i=0.0 ; i < 1000.0; i++) {
+      if(i > octaves){break;}
+      float noise = abs(snoise(p*freq));
+      sum += noise * amp;
+      freq *= lacunarity;
+      amp *= gain;
+    }
+    return sin (p.x*10.0 + sum) * 0.33 + sin(p.y*10.0 + sum) * 0.33 +sin(p.z*10.0 + sum) * 0.33 ;
+  }
+float ridgedmfDefault(vec3 p, float octaves)
+{
+       return ridgedmf(p, 2.0, .5, 1.0, octaves);
+}
+
+
+//**************** end of NOISE methods**************
+
+// The fractal calculation
+//
+// Calculate the closest distance to the fractal boundary and use this
+// distance as the size of the step to take in the ray marching.
+//
+// Fractal formula:
+//        z' = z^p + c
+//
+// For each iteration we also calculate the derivative so we can estimate
+// the distance to the nearest point in the fractal set, which then sets the
+// maxiumum step we can move the ray forward before having to repeat the calculation.
+//
+//       dz' = p * z^(p-1)
+//
+// The distance estimation is then calculated with:
+//
+//   0.5 * |z| * log(|z|) / |dz|
+//
+int colorVariable;
+float DE(vec3 z0, inout float min_dist)
+{
+        vec3 c = julia ? julia_c : z0; // Julia set has fixed c, Mandelbrot c changes with location
+        vec3 z = z0;
+        float pd = power - 1.0;                  // power for derivative
+
+        // Convert z to polar coordinates
+        float r  = length(z);
+        float th = atan(z.y, z.x);
+        float ph = asin(z.z / r);
+
+        // Record z orbit distance for ambient occulsion shading
+        if (r < min_dist) min_dist = r;
+
+        vec3 dz;
+        float ph_dz = 0.0;
+        float th_dz = 0.0;
+        float r_dz      = 1.0;
+        float powR, powRsin;
+
+        // Iterate to compute the distance estimator.
+        for (int n = 0; n < maxIterationsLimit; n++) {
+                colorVariable = n;
+                if(n >= maxIterations)
+                  break;
+                // Calculate derivative of
+                powR = power * pow(r, pd);
+                powRsin = powR * r_dz * sin(ph_dz + pd*ph);
+                dz.x = powRsin * cos(th_dz + pd*th) + 1.0;
+                dz.y = powRsin * sin(th_dz + pd*th);
+                dz.z = powR * r_dz * cos(ph_dz + pd*ph);
+
+                // polar coordinates of derivative dz
+                r_dz  = length(dz);
+                th_dz = atan(dz.y, dz.x);
+                ph_dz = acos(dz.z / r_dz);
+
+                // z iteration
+                powR = pow(r, power);
+                powRsin = sin(power*ph);
+                z.x = powR * powRsin * cos(power*th);
+                z.y = powR * powRsin * sin(power*th);
+                z.z = powR * cos(power*ph);
+                z += c;
+
+                // The triplex power formula applies the azimuthal angle rotation about the y-axis.
+                // Constrain this to get some funky effects
+                if (radiolaria && z.y > radiolariaFactor) z.y = radiolariaFactor;
+
+                r  = length(z);
+                if (r < min_dist) min_dist = r;
+                if (r > bailout) break;
+
+                th = atan(z.y, z.x) + phase.x;
+                ph = acos(z.z / r) + phase.y;
+
+        }
+
+        // Return the distance estimation value which determines the next raytracing
+        // step size, or if whether we are within the threshold of the surface.
+        return 0.5 * r * log(r)/r_dz;
+}
+
+
+
+
+// Intersect bounding sphere
+//
+// If we intersect then set the tmin and tmax values to set the start and
+// end distances the ray should traverse.
+bool intersectBoundingSphere(vec3 origin,
+                                                         vec3 direction,
+                                                         out float tmin,
+                                                         out float tmax)
+{
+        bool hit = false;
+       
+       //vec3 pN = vec3(0, 0, 1.0);
+       //float  t  = -(dot(origin, pN) + slice) / dot(direction, pN);
+       //origin = origin + t * direction;
+       
+        float b = dot(origin, direction);
+        float c = dot(origin, origin) - bounding;
+        float disc = b*b - c;                   // discriminant
+        tmin = tmax = 0.0;
+
+        if (disc > 0.0) {
+                // Real root of disc, so intersection
+                float sdisc = sqrt(disc);
+                float t0 = -b - sdisc;                  // closest intersection distance
+                float t1 = -b + sdisc;                  // furthest intersection distance
+
+                if (t0 >= 0.0) {
+                        // Ray intersects front of sphere
+                        float min_dist;
+                        vec3 z = origin + t0 * direction;
+                        tmin = DE(z, min_dist);
+                        tmax = t0 + t1;
+                } else if (t0 < 0.0) {
+                        // Ray starts inside sphere
+                        float min_dist;
+                        vec3 z = origin;
+                        tmin = DE(z, min_dist);
+                        tmax = t1;
+                }
+                hit = true;
+        }
+
+        return hit;
+}
+
+
+// Calculate the gradient in each dimension from the intersection point
+vec3 estimate_normal(vec3 z, float e)
+{
+        float min_dst;  // Not actually used in this particular case
+        vec3 z1 = z + vec3(e, 0, 0);
+        vec3 z2 = z - vec3(e, 0, 0);
+        vec3 z3 = z + vec3(0, e, 0);
+        vec3 z4 = z - vec3(0, e, 0);
+        vec3 z5 = z + vec3(0, 0, e);
+        vec3 z6 = z - vec3(0, 0, e);
+
+        float dx = DE(z1, min_dst) - DE(z2, min_dst);
+        float dy = DE(z3, min_dst) - DE(z4, min_dst);
+        float dz = DE(z5, min_dst) - DE(z6, min_dst);
+
+        return normalize(vec3(dx, dy, dz) / (2.0*e));
+}
+
+
+// Computes the direct illumination for point pt with normal N due to
+// a point light at light and a viewer at eye.
+vec3 Phong(vec3 pt, vec3 N, out float specular)
+{
+        vec3 diffuse    = vec3(0);                      // Diffuse contribution
+        vec3 color      = vec3(0);
+        specular = 0.0;
+        
+        vec3 L = normalize(light * objRotation - pt); // find the vector to the light
+        float  NdotL = dot(N, L);                       // find the cosine of the angle between light and normal
+
+        if (NdotL > 0.0) {
+                // Diffuse shading
+                diffuse = diffuseColor.rgb + abs(N) * colorSpread;
+                diffuse *= lightColor.rgb * NdotL;
+
+                // Phong highlight
+                vec3 E = normalize(eye - pt);           // find the vector to the eye
+                vec3 R = L - 2.0 * NdotL * N;           // find the reflected vector
+                float  RdE = dot(R,E);
+
+                if (RdE <= 0.0) {
+                        specular = specularity * pow(abs(RdE), specularExponent);
+                }
+        } else {
+                diffuse = diffuseColor.rgb * abs(NdotL) * rimLight;
+        }
+
+        return (ambientColor.rgb * ambientColor.a) + diffuse;
+}
+
+
+// Define the ray direction from the pixel coordinates
+vec3 rayDirection(vec2 p)
+{
+        vec3 direction = vec3( 2.0 * aspectRatio * p.x / float(size.x) - aspectRatio,
+                                                          -2.0 * p.y / float(size.y) + 1.0,
+                                                          -2.0 * exp(cameraZoom));
+        return normalize(direction * viewRotation * objRotation);
+}
+
+
+// Calculate the output colour for each input pixel
+vec4 renderPixel(vec2 pixel)
+{
+        float tmin, tmax;
+        vec3 ray_direction = rayDirection(pixel);
+        vec4 pixel_color = backgroundColor;
+
+        if (intersectBoundingSphere(eye, ray_direction, tmin, tmax)) {
+                vec3 ray = eye + tmin * ray_direction;
+
+                float dist, ao;
+                float min_dist = 4.0;
+                float ray_length = tmin;
+                float eps = MIN_EPSILON;
+
+                // number of raymarching steps scales inversely with factor
+                const int max_steps = int(float(stepLimit) / epsilonScale);
+                int i;
+                float f;
+
+                for (int i = 0; i < max_steps; ++i) {
+                        dist = DE(ray, min_dist);
+
+                        // March ray forward
+                        f = epsilonScale * dist;
+                        ray += f * ray_direction;
+                        ray_length += f * dist;
+
+                        // Are we within the intersection threshold or completely missed the fractal
+                        if (dist < eps || ray_length > tmax) {
+                                break;
+                        }
+
+                        // Set the intersection threshold as a function of the ray length away from the camera
+                        //eps = max(max(MIN_EPSILON, eps_start), pixel_scale * pow(ray_length, epsilonScale));
+                        eps = max(MIN_EPSILON, pixel_scale * ray_length);
+                }
+
+
+                // Found intersection?
+                if (dist < eps) {
+      vec3 normal = estimate_normal(ray, eps/2.0);
+                        ao      = 1.0 - clamp(1.0 - min_dist * min_dist, 0.0, 1.0) * ambientOcclusion;
+
+                        if (phong) {
+                                
+                                float specular = 0.0;
+                                pixel_color.rgb = Phong(ray, normal, specular);
+
+                                if (shadows > 0.0) {
+                                        // The shadow ray will start at the intersection point and go
+                                        // towards the point light. We initially move the ray origin
+                                        // a little bit along this direction so that we don't mistakenly
+                                        // find an intersection with the same point again.
+                                        vec3 light_direction = normalize((light - ray) * objRotation);
+                                        ray += normal * eps * 2.0;
+
+                                        float min_dist2;
+                                        dist = 4.0;
+
+                                        for (int j = 0; j < max_steps; ++j) {
+                                                dist = DE(ray, min_dist2);
+
+                                                // March ray forward
+                                                f = epsilonScale * dist;
+                                                ray += f * light_direction;
+
+                                                // Are we within the intersection threshold or completely missed the fractal
+                                                if (dist < eps || dot(ray, ray) > bounding * bounding) break;
+          }
+
+          // Again, if our estimate of the distance to the set is small, we say
+          // that there was a hit and so the source point must be in shadow.
+          if (dist < eps) {
+            pixel_color.rgb *= 1.0 - shadows;
+          } else {
+            // Only add specular component when there is no shadow
+            pixel_color.rgb += specular;
+          }
+                                }
+        else {
+                                        pixel_color.rgb += specular;
+                                }
+      }
+      else {
+                                // Just use the base colour
+                                pixel_color.rgb = diffuseColor.rgb;
+                        }
+      if(uNoise){
+        float noise ;
+        if(uMarble)
+          noise = marble(ray, uLacunarity, uGain, 1.0, uOctaves);
+        else
+          noise = ridgedmf(ray, uLacunarity, uGain, 1.0, uOctaves); 
+        pixel_color.rgb *= vec3(noise, noise, noise);
+      }
+                        if(normalLighting){   //using no lighting
+                                pixel_color.rgb = normal;
+                        }
+                        ao *= 1.0 - (float(i) / float(max_steps)) * ambientOcclusionEmphasis * 2.0;
+                        pixel_color.rgb *= ao;
+                        pixel_color.a = 1.0;
+                }
+        }
+
+        return pixel_color;
+}
+
+
+// The main loop
+void main()
+{
+        vec4 c = vec4(0, 0, 0, 1.0);
+        vec2 p = vec2(Position) * size;
+        if(uJustDE){
+    float min_dist = 4.0; //unused
+    float dist = DE(camera, min_dist);
+    float gVal = dist*255.0;
+    float bVal = gVal*255.0;
+    
+    dist = clamp(dist, 0.0, 1.0);
+    gVal = clamp(gVal, 0.0, 1.0);
+    bVal = clamp(bVal, 0.0, 1.0);
+    c = vec4(dist, gVal, bVal, 1.0);
+  }
+  
+  else{
+    if (antialiasing > 1) {
+      // Average detailSuperSample^2 points per pixel
+      float i = 0.0;
+      float j;
+      for (int iindex = 0; iindex<4; iindex++){
+        if(i>=1.0){break;}
+        j=0.0;
+        for (int jindex = 0; jindex<4; jindex++){
+          if(j>=1.0){break;}
+          c += sampleContribution * renderPixel(p + vec2(i, j));
+          j += sampleStep;
+        }
+        i += sampleStep;
+      }
+    } else {
+      c = renderPixel(p);
+    }
+        }
+        if (c.a <= 0.0) discard;
+        
+        // Return the final color which is still the background color if we didn't hit anything.
+        gl_FragColor = c;
+}
+
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec4 aVertexColor;
+
+    uniform bool uJustDE;
+
+    varying vec3 Position;
+
+void main() 
+{
+  if(uJustDE){
+    gl_Position =  vec4(-1.0 + 0.01 * aVertexPosition.x, -1.0 + 0.01* aVertexPosition.y, -0.1, 1.0);//vec4(aVertexPosition / 500.0-vec3(0.9,0.9,0.0), 1.0);// vec4(.5, .5, 0.0, 1.0);
+ 
+    }
+  else{
+    gl_Position = vec4(aVertexPosition, 1.0);
+   
+  }
+        Position = vec3((aVertexPosition.x + 1.0) / 2.0, (aVertexPosition.y + 1.0) / 2.0, 0.0);//
+}
+</script>
+
+
+<script type="text/javascript">
+
+    var gl;
+
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+      var fragmentShader = getShader(gl, "shader-fs");
+      var vertexShader = getShader(gl, "shader-vs");
+      shaderProgram = gl.createProgram();
+      gl.attachShader(shaderProgram, vertexShader);
+      gl.attachShader(shaderProgram, fragmentShader);
+      gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+        gl.enableVertexAttribArray(shaderProgram.vertexColorAttribute);
+
+        shaderProgram.time = gl.getUniformLocation(shaderProgram, "time");
+
+        shaderProgram.camera = gl.getUniformLocation(shaderProgram, "camera");
+        shaderProgram.viewRotation = gl.getUniformLocation(shaderProgram, "viewRotation");
+
+        shaderProgram.colorChange = gl.getUniformLocation(shaderProgram, "colorChange");
+        shaderProgram.ambientRed = gl.getUniformLocation(shaderProgram, "ambientRed");
+        shaderProgram.ambientGreen = gl.getUniformLocation(shaderProgram, "ambientGreen");
+        shaderProgram.ambientBlue = gl.getUniformLocation(shaderProgram, "ambientBlue");
+
+      shaderProgram.normalLighting = gl.getUniformLocation(shaderProgram, "normalLighting");
+        shaderProgram.power = gl.getUniformLocation(shaderProgram, "power");
+        shaderProgram.maxIterations = gl.getUniformLocation(shaderProgram, "maxIterations");
+        shaderProgram.antialiasing = gl.getUniformLocation(shaderProgram, "antialiasing");
+        shaderProgram.julia = gl.getUniformLocation(shaderProgram, "julia");
+        shaderProgram.permSampler = gl.getUniformLocation(shaderProgram, "permTexture");
+        shaderProgram.phong = gl.getUniformLocation(shaderProgram, "phong");
+        shaderProgram.noise = gl.getUniformLocation(shaderProgram, "uNoise");
+        shaderProgram.marble = gl.getUniformLocation(shaderProgram, "uMarble");
+        shaderProgram.lacunarity = gl.getUniformLocation(shaderProgram, "uLacunarity");
+        shaderProgram.gain = gl.getUniformLocation(shaderProgram, "uGain");
+        shaderProgram.octaves = gl.getUniformLocation(shaderProgram, "uOctaves");
+      shaderProgram.justDE = gl.getUniformLocation(shaderProgram,"uJustDE");
+    }
+
+
+
+    function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+    }
+//for noise function
+var perm = new Uint8Array([151,160,137,91,90,15,
+                                     131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
+                                     190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
+                                     88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
+                                     77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
+                                     102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
+                                     135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
+                                     5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
+                                     223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
+                                     129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
+                                     251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
+                                     49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
+                                     138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180,
+                                     151,160,137,91,90,15,
+                                     131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,
+                                     190, 6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,
+                                     88,237,149,56,87,174,20,125,136,171,168, 68,175,74,165,71,134,139,48,27,166,
+                                     77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,
+                                     102,143,54, 65,25,63,161, 1,216,80,73,209,76,132,187,208, 89,18,169,200,196,
+                                     135,130,116,188,159,86,164,100,109,198,173,186, 3,64,52,217,226,250,124,123,
+                                     5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,
+                                     223,183,170,213,119,248,152, 2,44,154,163, 70,221,153,101,155,167, 43,172,9,
+                                     129,22,39,253, 19,98,108,110,79,113,224,232,178,185, 112,104,218,246,97,228,
+                                     251,34,242,193,238,210,144,12,191,179,162,241, 81,51,145,235,249,14,239,107,
+                                     49,192,214, 31,181,199,106,157,184, 84,204,176,115,121,50,45,127, 4,150,254,
+                                     138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180
+                                    ]);
+  var grad3 = new Int8Array([0,1,1,0,1,-1,0,-1,1,0,-1,-1,
+                   1,0,1,1,0,-1,-1,0,1,-1,0,-1,
+                   1,1,0,1,-1,0,-1,1,0,-1,-1,0,
+                   1,0,-1,-1,0,-1,0,-1,1,0,1,1]);
+
+  var permTexture;
+  function initPermTexture() {
+    var width = 256;
+    var components = 4;
+    var pixels = new Uint8Array(width * width * components);
+    for(var i = 0; i < width; i++) {
+      for(var j = 0; j < width; j++) {
+        var offset = (i * width + j) * components;
+        var value = perm[(j + perm[i]) & 0xff];
+        pixels[offset] = grad3[(value & 0x0f) * 3 + 0] * 64 + 64;
+        pixels[offset + 1] = grad3[(value & 0x0f) * 3 + 1] * 64 + 64;
+        pixels[offset + 2] = grad3[(value & 0x0f) * 3 + 2] * 64 + 64;
+        pixels[offset + 3] = value;
+      }
+    }
+    gl.pixelStorei ( gl.UNPACK_ALIGNMENT, 1 );
+    permTexture = gl.createTexture();
+    
+    gl.bindTexture(gl.TEXTURE_2D, permTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
+      width, width, 0, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST );
+    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST );
+  }
+  //end of items need for noise
+
+    var squareVertexPositionBuffer;
+
+    function initBuffers() {
+        squareVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        vertices = [
+             1.0,  1.0,  0.0,
+            -1.0,  1.0,  0.0,
+             1.0, -1.0,  0.0,
+            -1.0, -1.0,  0.0
+            ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        squareVertexPositionBuffer.itemSize = 3;
+        squareVertexPositionBuffer.numItems = 4;
+    }
+    function length(vect){
+        var total = 0.0;
+        for(var i =0; i<vect.length; i++)
+            total += vect[i] * vect[i];
+        return Math.sqrt(total);
+    }
+
+
+  
+  var currentlyPressedKeys = {};
+  var cameraRotation = mat4.create();
+  mat4.identity(cameraRotation);
+  var cameraPosition = [0.01, 0.0, 3.0];
+  var distToSurface = 0.0;
+  //mat4.translate(cameraRotation, [1.0, 0.05, 2.0]);
+  //mat4.rotate(cameraRotation, 0.0, [0.0, 0.0, 0.0])
+    function handleKeyDown(event) {
+                currentlyPressedKeys[event.keyCode] = true;
+        }
+  
+          function handleKeyUp(event) {
+                  currentlyPressedKeys[event.keyCode] = false;
+          }
+
+    function handleKeys() {
+      var newRotation = mat4.create();
+      mat4.identity(newRotation);
+
+//pitch
+      if (currentlyPressedKeys[73]) {
+        //  i
+        mat4.rotate(newRotation, 0.1, [1.0, 0.0, 0.0]);
+      }
+      if (currentlyPressedKeys[75]) {
+        //  k
+        mat4.rotate(newRotation, -0.1, [1.0, 0.0, 0.0]);
+      }
+ //yaw
+    if (currentlyPressedKeys[74]) {
+          //  j
+          mat4.rotate(newRotation, -0.1, [0.0, 1.0, 0.0]);
+        }
+      if (currentlyPressedKeys[76]) {
+        // l
+        mat4.rotate(newRotation, 0.1, [0.0, 1.0, 0.0]);
+      }
+//roll
+      if (currentlyPressedKeys[85]) {
+        //  u
+        mat4.rotate(newRotation, 0.1, [0.0, 0.0, 1.0]);
+      }
+      if (currentlyPressedKeys[79]) {
+        // o
+        mat4.rotate(newRotation, -0.1, [0.0, 0.0, 1.0]);
+      }
+
+      //set cameraRotation based on new input
+      mat4.multiply(newRotation, cameraRotation, cameraRotation);
+
+//use the inverse to compute movement
+    var inverseMatrix = mat4.create();
+    mat4.inverse(cameraRotation, inverseMatrix);
+
+      //create a vector coming out from the camera to determine which way to move
+//for in and out movement
+      var zDir = [0.0, 0.0, 1.0];
+      mat4.multiplyVec3(inverseMatrix, zDir);
+      
+      //var dist = DE(cameraPosition); //unused since distance is computed in shader now
+ 
+      dist = distToSurface/5
+
+      var dist = distToSurface; 
+      var trimDist = trimNum(dist.toString());      
+      document.getElementById("cameraDistance").value = trimDist;
+      
+      dist = dist/5 //camera moves 1/5 distance to surface (about);
+
+      var zDir = [0.0, 0.0, 1.0];
+      mat4.multiplyVec3(inverseMatrix, zDir);
+      
+      
+      var tempPosition = [cameraPosition[0], cameraPosition[1], cameraPosition[2]];
+      
+      if (currentlyPressedKeys[87]) {
+        // w
+        tempPosition[0] -= dist * zDir[0];
+        tempPosition[1] -= dist * zDir[1] ;
+        tempPosition[2] -= dist * zDir[2];
+      }
+      if (currentlyPressedKeys[83]) {
+        // s
+        tempPosition[0] += dist * zDir[0];
+        tempPosition[1] += dist * zDir[1];
+        tempPosition[2] += dist * zDir[2];
+      }
+      
+      //now create a vector pointing to the right as the camera would see it
+      //for left-right movement
+      var xDir = [1.0, 0.0, 0.0];
+      mat4.multiplyVec3(inverseMatrix, xDir);
+      
+      if (currentlyPressedKeys[65]) {
+        // a
+        tempPosition[0] -= dist * xDir[0];
+        tempPosition[1] -= dist * xDir[1];
+        tempPosition[2] -= dist * xDir[2];
+      }
+      
+      if (currentlyPressedKeys[68]) {
+        // d
+        tempPosition[0] += dist * xDir[0];
+        tempPosition[1] += dist * xDir[1];
+        tempPosition[2] += dist * xDir[2];
+      }
+
+      //calculate up vector for elevator movement
+      var yDir = [0.0, 1.0, 0.0];
+      mat4.multiplyVec3(inverseMatrix, yDir);
+      
+      if (currentlyPressedKeys[69]) {
+        // e
+        tempPosition[0] -= dist * yDir[0];
+        tempPosition[1] -= dist * yDir[1];
+        tempPosition[2] -= dist * yDir[2];
+      }
+      
+      if (currentlyPressedKeys[67]) {
+        // c
+        tempPosition[0] += dist * yDir[0];
+        tempPosition[1] += dist * yDir[1];
+        tempPosition[2] += dist * yDir[2];
+      }
+      
+      if(length(tempPosition) <4)
+        cameraPosition = tempPosition;
+      document.getElementById("cameraDirectionX").value = Math.round(zDir[0] * 100)/100;
+      document.getElementById("cameraDirectionY").value = Math.round(zDir[1] * 100)/100;
+      document.getElementById("cameraDirectionZ").value = Math.round(zDir[2] * 100)/100;
+      
+      document.getElementById("cameraPosX").value = -Math.round(cameraPosition[0] * 100)/100;
+      document.getElementById("cameraPosY").value = -Math.round(cameraPosition[1] * 100)/100;
+      document.getElementById("cameraPosZ").value = -Math.round(cameraPosition[2] * 100)/100;
+
+      
+    }
+    var rTri = 0;
+    var rSquare = 0;
+    var time = 0.0;
+  
+    var julia;
+  
+        var aaValue = 1;
+  
+  
+  var power;
+  function setUniforms() {
+    gl.uniform1i(shaderProgram.time, time);
+    
+    //camera
+    gl.uniform3fv(shaderProgram.camera, cameraPosition);
+    gl.uniformMatrix3fv(shaderProgram.viewRotation, false, mat4.toMat3(cameraRotation));
+    
+    
+    //phong shading
+    gl.uniform1f(shaderProgram.phong, document.getElementById("phong").checked
+                 || document.getElementById("phongNoise").checked );      
+    //noise uniforms
+    gl.uniform1f(shaderProgram.noise, document.getElementById("noise").checked 
+                 || document.getElementById("phongNoise").checked );
+    gl.uniform1f(shaderProgram.marble, document.getElementById("marble").checked);
+    gl.uniform1f(shaderProgram.lacunarity, document.getElementById("lacunarity").value);
+    gl.uniform1f(shaderProgram.gain, document.getElementById("gain").value);
+    gl.uniform1f(shaderProgram.octaves, document.getElementById("octaves").value);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, permTexture);
+    gl.uniform1i(shaderProgram.permSampler, 0);
+    
+                //normal lighting
+                gl.uniform1f(shaderProgram.normalLighting, document.getElementById("normal").checked);
+    
+    gl.uniform1i(shaderProgram.maxIterations, document.getElementById("maxIterations").value);
+    
+    //changing of powers
+    if(document.getElementById("iteratePowers").checked==true){
+      power = 8.0 + Math.cos(time / 10000.0) * 4.0;
+      var trimPower = trimNum(power.toString());
+      document.getElementById("power").value = trimPower;
+      document.getElementById("power").className = "checked";
+    }else{
+      power = document.getElementById("power").value;
+      document.getElementById("power").className = "unchecked";
+    }
+    
+    gl.uniform1f(shaderProgram.power, power);
+    
+    gl.uniform1i(shaderProgram.antialiasing, aaValue);
+    
+    gl.uniform1f(shaderProgram.julia, document.getElementById("julia").checked);
+    
+    
+    colorChange = document.getElementById("colorChange").value;
+    gl.uniform1f(shaderProgram.colorChange, colorChange);
+    
+    ambientRed = document.getElementById("ambientRed").value;
+    ambientGreen = document.getElementById("ambientGreen").value;
+    ambientBlue = document.getElementById("ambientBlue").value;
+    
+    gl.uniform1f(shaderProgram.ambientRed, ambientRed);
+    gl.uniform1f(shaderProgram.ambientGreen, ambientGreen);
+    gl.uniform1f(shaderProgram.ambientBlue, ambientBlue);
+    
+
+
+  }
+    
+    function drawScene() {
+      gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+      //load our square to draw on
+      gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+      gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+    
+      //set uniforms in shader
+      setUniforms();
+
+      //draw the mandelbulb
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+   
+      //set the bottom left pixel to encode distance
+      gl.uniform1f(shaderProgram.justDE, true);  
+      //gl.drawArrays(gl.POINTS , 0, 1);
+                        gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+      var deArr = new Uint8Array(4);
+      gl.readPixels(0 , 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, deArr);
+      
+      distToSurface = deArr[0] / 255.0 + deArr[1] / (255.0 * 255.0) + deArr[2] / (255.0 * 255 *255);
+      document.getElementById("cameraDistance").value = distToSurface;
+      gl.uniform1f(shaderProgram.justDE, false);  
+
+                
+        
+  }
+
+
+    function animate() {
+        time = new Date().getTime();
+    }
+    
+    var lastFPS = 1;
+    var fps = 1;
+  
+    function tick() {
+      if(document.getElementById("stop").checked == true){
+        requestAnimFrame(tick);
+        return;
+      }
+      animate();
+      handleKeys();
+      
+      fps = 1000/(time - lastFPS);
+      document.getElementById("fps").value = Math.round(100 * fps)/100 ;
+      lastFPS = time;
+      
+      //attempt to keep system responsive 
+      if(fps < 3){ 
+        handleKeys(); //sytem is slow, up the keyboard input
+        if (fps < 1){    //is your GPU smoking?
+          handleKeys();//system is reallly slowing down, lets up the input
+          setTimeout("tick();", 200)
+          return;
+        }
+        setTimeout("tick();", 100);
+          return;
+      }
+      
+      requestAnimFrame(tick);
+        
+      drawScene();
+        
+    }
+
+
+    function webGLStart() {
+        var canvas = document.getElementById("mandelBulb");
+        initGL(canvas);
+        initShaders()
+        initBuffers();
+
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+        document.onkeydown = handleKeyDown;
+        document.onkeyup = handleKeyUp;
+      
+        initPermTexture();
+      
+        tick();
+    }
+
+    function showValue(name, newValue)    {
+      document.getElementById(name).innerHTML=newValue;
+    }
+
+        function aaChange(aaNum){
+                aaValue = aaNum;
+        }
+
+        function trimNum(num){
+                return num.substr(0,7);
+        }
+
+        
+        var presetRotation = mat4.create();
+
+        function preset(num){
+
+                var presetRotation = mat4.create();
+                mat4.identity(presetRotation);
+        
+                if(num == 1){
+
+                        resetCamera();
+        
+                        cameraPosition[0] = 0.01;                       
+                        cameraPosition[1] = 0.0;                        
+                        cameraPosition[2] = 3.0;
+                        
+                        document.getElementById("phong").checked = true;
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("phong").checked = true;
+                        document.getElementById("power").value = 8;
+                        document.getElementById("iteratePowers").checked = true;
+                        document.getElementById("iterationValue").value = 10;
+                        document.getElementById("antialiasing1").checked = true;
+                        aaValue = 1;
+                        document.getElementById("colorChange").value = 1;
+                        document.getElementById("ambientRed").value = 0.5;
+                        document.getElementById("ambientGreen").value = 0.5;
+                        document.getElementById("ambientBlue").value = 0.5;
+                        document.getElementById("marble").checked = true;
+                        document.getElementById("lacunarity").value = 2.0;
+                        document.getElementById("gain").value = 0.5;
+                        document.getElementById("octaves").value = 50;
+                        document.getElementById("stop").checked = false;
+
+                }else if(num == 2){
+
+                        resetCamera();  
+
+                        mat4.rotate(presetRotation, 1.0, [0.0, 1.0, 0.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = -1.45;
+                        cameraPosition[1] = 0.29;                       
+                        cameraPosition[2] = 0.54;
+                        
+                        document.getElementById("normal").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 11.5;
+                        document.getElementById("antialiasing3").checked = true;
+                        aaValue = 3;
+                        setTimeout("document.getElementById('stop').checked = true",100);
+
+                }else if(num == 3){
+
+                        resetCamera();  
+
+                        mat4.rotate(presetRotation, -0.25, [0.0, 1.0, 0.0]);
+                        mat4.rotate(presetRotation, -1.5, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, 2.5, [0.0, 1.0, 0.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = -0.49;
+                        cameraPosition[1] = -1.24;                      
+                        cameraPosition[2] = 0.41;
+                                                
+                        document.getElementById("normal").checked = true;
+                        document.getElementById("julia").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 5.015;
+                        document.getElementById("antialiasing3").checked = true;
+                        aaValue = 3;
+                        setTimeout("document.getElementById('stop').checked = true",100);
+
+                }else if(num == 4){
+                        
+                        resetCamera();  
+
+                        mat4.rotate(presetRotation, 1.0, [0.0, 1.0, 0.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = -1.23;
+                        cameraPosition[1] = 0.0;                        
+                        cameraPosition[2] = 0.77;
+
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("iteratePowers").checked = true;
+                        document.getElementById("lacunarity").value = 10;
+                        document.getElementById("gain").value = 1;
+                        document.getElementById("octaves").value = 1;
+                        document.getElementById("noise").checked = true;
+                        document.getElementById("original").checked = true;
+                        document.getElementById("antialiasing1").checked = true;
+                        aaValue = 1;
+                        document.getElementById("stop").checked = false;
+
+                }else if(num == 5){
+
+                        resetCamera();
+
+                        mat4.rotate(presetRotation, 0.78, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, 0.92, [0.0, 0.0, 1.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = 1.66;
+                        cameraPosition[1] = 1.19;                       
+                        cameraPosition[2] = 2.01;
+
+                        document.getElementById("stop").checked = false;
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 7;
+                        document.getElementById("phongNoise").checked = true;
+                        document.getElementById("marble").checked = true;
+                        document.getElementById("colorChange").value = 0.5;
+                        document.getElementById("ambientRed").value = 0.7;
+                        document.getElementById("ambientGreen").value = 0.3;
+                        document.getElementById("ambientBlue").value = 0.9;
+                        document.getElementById("antialiasing1").checked = true;
+                        aaValue = 1;
+
+                }else if(num == 6){
+
+                        resetCamera();
+                        
+                        mat4.rotate(presetRotation, -2.4, [0.0, 1.0, 0.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = 1.24;
+                        cameraPosition[1] = 0.0;                        
+                        cameraPosition[2] = -1.42;
+
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("iteratePowers").checked = true;
+                        document.getElementById("ambientRed").value = 0;
+                        document.getElementById("ambientGreen").value = 0.69;
+                        document.getElementById("ambientBlue").value = 0;
+                        document.getElementById("colorChange").value = 0.5;
+                        document.getElementById("phong").checked = true;
+                        document.getElementById("antialiasing1").checked = true;
+                        aaValue = 1;
+                        document.getElementById("stop").checked = false;
+
+
+                }else if(num == 7){
+
+                        resetCamera();
+
+                        mat4.rotate(presetRotation, 0.78, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, 0.92, [0.0, 0.0, 1.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = 1.66;
+                        cameraPosition[1] = 1.19;                       
+                        cameraPosition[2] = 2.01;
+                        document.getElementById("stop").checked = false;
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 4.48;
+                        document.getElementById("normal").checked = true;
+                        document.getElementById("antialiasing2").checked = true;
+                        aaValue = 2;
+
+                }else if(num == 8){
+
+                        resetCamera();
+
+                        mat4.rotate(presetRotation, -0.78, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, -0.92, [0.0, 0.0, 1.0]);
+                        mat4.rotate(presetRotation, 0.75, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, 9, [0.0, 1.0, 0.0]);
+                        mat4.rotate(presetRotation, 5, [0.0, 0.0, 1.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = -1.33;
+                        cameraPosition[1] = -2.56;                      
+                        cameraPosition[2] = -1.82;
+                        document.getElementById("stop").checked = false;
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 3.5;
+                        document.getElementById("normal").checked = true;
+                        document.getElementById("antialiasing2").checked = true;
+                        aaValue = 2;
+
+                }else if(num == 9){
+                        
+                        resetCamera();
+
+                        mat4.rotate(presetRotation, -0.78, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, -0.92, [0.0, 0.0, 1.0]);
+                        mat4.rotate(presetRotation, 0.75, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, 9, [0.0, 1.0, 0.0]);
+                        mat4.rotate(presetRotation, 5, [0.0, 0.0, 1.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = -1.33;
+                        cameraPosition[1] = -2.56;                      
+                        cameraPosition[2] = -1.82;
+                        document.getElementById("stop").checked = false;
+                        document.getElementById("julia").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 2;
+                        document.getElementById("normal").checked = true;
+                        document.getElementById("antialiasing2").checked = true;
+                        aaValue = 1;
+
+                }else if(num == 10){
+
+                        resetCamera();
+                        
+                        mat4.rotate(presetRotation, 3.14, [1.0, 0.0, 0.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = 0.05;
+                        cameraPosition[1] = 0.0;                        
+                        cameraPosition[2] = -3.21;
+                        document.getElementById("stop").checked = false;
+                        document.getElementById("julia").checked = true;
+                        document.getElementById("iteratePowers").checked = false;
+                        document.getElementById("power").value = 4;
+                        document.getElementById("normal").checked = true;
+                        document.getElementById("antialiasing1").checked = true;
+                        aaValue=1;
+                
+                }else if(num == 11){
+
+                        resetCamera();
+                        
+                        mat4.rotate(presetRotation, 2.6, [1.0, 0.0, 0.0]);
+                        mat4.rotate(presetRotation, -1.5, [0.0, 0.0, 1.0]);
+                        mat4.rotate(presetRotation, 3.14, [1.0, 0.0, 0.0]);
+                        mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+
+                        cameraPosition[0] = -1.35;
+                        cameraPosition[1] = 0.0;                        
+                        cameraPosition[2] = 2.14;
+                        document.getElementById("stop").checked = false;
+                        document.getElementById("mandelbrot").checked = true;
+                        document.getElementById("iteratePowers").checked = true;
+                        document.getElementById("noise").checked = true;
+                        document.getElementById("marble").checked = true;
+                        document.getElementById("antialiasing1").checked = true;
+                        aaValue=1;
+        }
+}
+
+        function resetCamera(){
+                mat4.identity(presetRotation);
+                mat4.identity(cameraRotation);
+                mat4.multiply(presetRotation, cameraRotation, cameraRotation);
+        }
+
+        
+</script>
+
+</head>
+
+
+<body onload="webGLStart();">
+
+<!-- The end of the full body table -->
+<table class="fullbody"><tr><td>
+
+
+<div class="header">
+        <h1>MandelBulb</h1>
+        <h3>By: Michael Jewell, Jesse Altman, Shane Christy, Kayla Artinyan</h3>
+        <h4>WARNING! This is graphic intensive. Use a high end computer for best performance.
+        <br />
+        Requires Linux or Mac OS X to run. Chrome Browser prefered.</h4>
+        <hr width="65%" />
+        <br />
+</div>
+
+<div class="canvas">    
+        <canvas id="mandelBulb" style="border: none;" width="500" height="500"></canvas>
+</div>
+
+<div class="stats">
+
+        <h2>Current Statistics</h2>
+        <u>FPS:</u> <input type="text" id="fps" value="0.0" size="8"  class="statBox"/>
+
+        <br /><br />
+
+        <u>Camera Direction:</u>&nbsp;&nbsp;
+        X:&nbsp;&nbsp;<input type="text" id="cameraDirectionX" value="0.0" size="6" class="statBox" />
+        Y:&nbsp;&nbsp;<input type="text" id="cameraDirectionY" value="0.0" size="6" class="statBox" />
+        Z:&nbsp;&nbsp;<input type="text" id="cameraDirectionZ" value="-1.0" size="6" class="statBox" />
+
+        <br/>
+        
+        <u>Camera Position:</u>&nbsp;&nbsp;&nbsp;&nbsp;
+        X:&nbsp;&nbsp;<input type="text" id="cameraPosX" value="0.0" size="6" class="statBox" />
+        Y:&nbsp;&nbsp;<input type="text" id="cameraPosY" value="0.0" size="6" class="statBox" />
+        Z:&nbsp;&nbsp;<input type="text" id="cameraPosZ" value="2.0" size="6" class="statBox" />
+
+        <br/><br />
+
+        <u>Camera Distance to fractal:</u>&nbsp;
+        <input type="text" id="cameraDistance" value="0.0" class="statBox" size="20" /> <br/>
+
+        <br />
+        <h2>Controls:</h2>
+
+        <ul>
+                <li>Move Forward/Backwards -- W/S</li>
+                <li>Move Left/Right -- A/D</li>
+                <li>Move Up/Down -- E/C</li>
+                <br />
+                <li>Rotate Up/Down -- I/K</li>
+                <li>Rotate Left/Right -- J/L</li>
+                <li>Roll Left/Right -- U/O</li>
+        </ul>
+
+        <h2>Presets</h2>
+
+        <input type="button" value="1" onclick="preset(1)" />
+        <input type="button" value="2" onclick="preset(2)" />
+        <input type="button" value="3" onclick="preset(3)" />
+        <input type="button" value="4" onclick="preset(4)" />
+        <input type="button" value="5" onclick="preset(5)" />
+        <input type="button" value="6" onclick="preset(6)" />
+        <input type="button" value="7" onclick="preset(7)" />
+        <input type="button" value="8" onclick="preset(8)" /><br />
+        <input type="button" value="9" onclick="preset(9)" />
+        <input type="button" value="10" onclick="preset(10)" />
+        <input type="button" value="11" onclick="preset(11)" />
+
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+        <input type="checkbox" id="stop" />Stop
+
+
+
+        
+</div>
+
+<div class="close">
+        <br />
+</div>
+
+
+<div class="all">
+
+        <h2>Variables</h2>
+
+        <div class="allLeft">
+                <u>Fractal Set</u><br />
+                <input id="mandelbrot" type="radio" name="fractalGroup" checked/>Mandelbrot<br />
+                <input id="julia" type="radio" name="fractalGroup" />Julia 
+        </div>
+        
+        <div class="allRight">
+                <u>Other Shading Styles</u><br />
+                <input id="phongNoise" type="radio" name="shading" />Phong and Noise<br />
+                <input id="normal" type="radio" name="shading" />Normals<br />
+                <input id="none" type="radio" name="shading" />None
+        </div>
+
+        <div class="close">
+                <br />
+        </div>
+
+        
+
+        Iterate Powers <input type="checkbox" id="iteratePowers" value="iterate" checked /><br/>
+        
+        Power: <input type="text" id="power" value="8" class="checked" size="8" /><br />
+        
+        Max Iterations (provides finer detail):
+        <input id="maxIterations" type="range" min="0" max="50" value="10" step="1" 
+        onchange="showValue('iterationValue', this.value)" />
+        &nbsp;&nbsp;&nbsp;&nbsp;        
+        <span id="iterationValue">10</span>
+
+        <br/><br />
+
+        Antialiasing (minimizes distortion / slows rendering exponentially):<br />
+        <input id="antialiasing1" type="radio" name="aavalue" onchange="aaChange(1)" checked />1x
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <input id="antialiasing2" type="radio" name="aavalue" onchange="aaChange(2)" />2x
+        &nbsp;&nbsp;&nbsp;&nbsp;
+        <input id="antialiasing3" type="radio" name="aavalue" onchange="aaChange(3)" />3x
+
+        <br/><br />
+
+
+
+</div>
+
+
+
+<div class="phong">
+        <h2>Phong Variables</h2>
+
+        <input id="phong" type="radio" name="shading" checked />Phong Shading
+
+        <br /><br />
+
+        Color Change Speed: <input type="text" id="colorChange" value="1" size="6" /><br />
+        Ambient Red:&nbsp;&nbsp;&nbsp;&nbsp;
+        <input type="text" id="ambientRed" value="0.5" size="6" /><br />
+        Ambient Green:&nbsp;
+        <input type="text" id="ambientGreen" value="0.5" size="6" /><br />
+        Ambient Blue:&nbsp;&nbsp;&nbsp;
+        <input type="text" id="ambientBlue" value="0.9" size="6" /><br/>
+
+</div>
+
+
+
+<div class="noise">
+        <h2>Noise Variables</h2>
+
+        <input id="noise" type="radio" name="shading" />Noise Shading
+
+        <br /><br />
+
+        <input id="marble" type="radio" name="noiseType" checked/>Marble<br />
+        <input id="original" type="radio" name="noiseType" />Standard
+
+        <br /><br />
+
+        Lacunarity: <input id="lacunarity" type="text" value="2.0" size="6" /><br />
+        Gain: <input id="gain" type="text" value="0.5" size="6" /><br />
+        Octaves: <input id="octaves" type="text" value="50" size="6" /><br/>
+</div>
+
+<div class="close">
+        
+        <hr width="90%" />
+
+        <h2>Credits</h2>
+
+        The origin of our mandelbulb equations:<br />
+        Mandelbulb.pbk<br />
+        Last update: 14 December 2009<br />
+        <br />
+        Copyright (c) 2009 Tom Beddard<br />
+        http://www.subblue.com<br />
+        <br />
+        For more Flash and PixelBender based generative graphics experiments see:<br />
+        http://www.subblue.com/blog<br />
+        <br />
+        Licensed under the MIT License:<br />
+        http://www.opensource.org/licenses/mit-license.php<br />
+        <br />
+        <br />
+        Credits and references<br />
+        ======================<br />
+        For the story behind the 3D Mandelbrot see the following page:<br />
+        http://www.skytopia.com/project/fractal/mandelbulb.html<br />
+        <br />
+        The original forum disussion with many implementation details can be found here:<br />
+        http://www.fractalforums.com/3d-fractal-generation/true-3d-mandlebrot-type-fractal/<br />
+        <br />
+        This implementation references the 4D Quaternion GPU Raytracer by Keenan Crane:<br />
+        http://www.devmaster.net/forums/showthread.php?t=4448<br />
+        <br />
+        and the NVIDIA CUDA/OptiX implementation by cbuchner1:<br />
+        http://forums.nvidia.com/index.php?showtopic=150985<br />
+        <br />
+        -- noise provided by --<br />
+        The following is noise calculations are provided from<br />
+        Original noise Author: Stefan Gustavson ITN-LiTH (stegu@itn.liu.se) 2004-12-05<br />
+        Simplex indexing functions by Bill Licea-Kane, ATI<br />
+        <br />
+        You may use, modify and redistribute this code free of charge,<br />
+        provided that the author's names and this notice appear intact.<br />
+        <br />
+        The code was hosted at http://www.pcprogramming.com/NoiseCube.html
+
+
+</div>
+
+<br/>
+
+
+<!-- The end of the full body table -->
+</td></tr></table>
+
+</body>
+
+</html>
+Hide details
+Change log
+fce595ae8a12 by Michael Jewell <michael....@maine.edu> on Dec 12, 2011   Diff
+set default to not stop
+Go to: 	
+Older revisions
+ c5503add6443 by Michael Jewell <michael....@maine.edu> on Dec 12, 2011   Diff 
+ 3c7559899439 by Michael Jewell <mjew...@daredevil.(none)> on Dec 12, 2011   Diff 
+ 22b10ab93048 by Jesse Altman <jalt...@daredevil.(none)> on Dec 12, 2011   Diff 
+All revisions of this file
+File info
+Size: 56208 bytes, 1809 lines
+View raw file
