@@ -1,0 +1,173 @@
+<html>
+	<head>
+		<title>3D365 - Infinite Star</title>
+		<style>
+			body { margin: 0; }
+			canvas { width: 100%; height: 100% }
+		</style>
+	</head>
+	<body>
+		<script src="bower_components/threejs/build/three.min.js"></script>
+		<script src="TrackballControls.js"></script>
+		<script src="OBJLoader.js"></script>
+
+		<script>
+
+
+var camera, scene, renderer, controls,cameraTarget;
+var url = 'obj/star_1.obj';
+
+init();
+animate();
+
+		function init() {
+			 scene = new THREE.Scene();
+			 camera = new THREE.PerspectiveCamera( 75, window.innerWidth/window.innerHeight, 0.1, 1000 );
+
+			  cameraTarget = new THREE.Vector3( 0, -0.25, 0 );
+
+			 renderer = new THREE.WebGLRenderer();
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.setClearColor(0xFFFFFF, 1); 
+
+			 // add spotlight for the shadows
+       		 var spotLight = new THREE.SpotLight(0xffffff);
+       			 spotLight.position.set(10, 0, 10);
+       			 spotLight.castShadow = true;
+       			// scene.add(spotLight);
+
+       		// LIGHTS
+
+				hemiLight = new THREE.HemisphereLight( 0xffffff, 0xffffff, 0.6 );
+				hemiLight.color.setHSL( 0.6, 1, 0.6 );
+				hemiLight.groundColor.setHSL( 0.095, 1, 0.75 );
+				hemiLight.position.set( 0, 500, 0 );
+				scene.add( hemiLight );
+
+
+
+
+			document.body.appendChild( renderer.domElement );
+
+
+			controls = new THREE.TrackballControls( camera, renderer.domElement );
+			controls.minDistance = 0;
+			controls.maxDistance = 10;
+
+
+
+
+			var material1 = new THREE.MeshBasicMaterial( { color: "rgb(0,0,0)", wireframe:true,	opacity:1,
+			transparent:true , side: THREE.DoubleSide});
+
+		
+
+		var material2 = new THREE.MeshPhongMaterial( { color: 0xD92588, specular: 0xFF3333, shininess: 10, shading: THREE.FlatShading } )
+
+
+			var tetrahedronGeometry = new THREE.TetrahedronGeometry(2, 1)
+			var tetrahedron = new THREE.Mesh( tetrahedronGeometry, material2 );
+			
+			tetrahedron.castShadow = true;
+			tetrahedron.receiveShadow = true;
+			// scene.add(tetrahedron);
+		
+		
+		// Define the manager first
+
+		var manager = new THREE.LoadingManager();
+				manager.onProgress = function ( item, loaded, total ) {
+
+					console.log( item, loaded, total );
+
+				};
+		var onProgress = function ( xhr ) {
+					if ( xhr.lengthComputable ) {
+						var percentComplete = xhr.loaded / xhr.total * 100;
+						console.log( Math.round(percentComplete, 2) + '% downloaded' );
+					}
+				};
+
+				var onError = function ( xhr ) {
+				};		
+
+		// OBJ Load
+		var loader = new THREE.OBJLoader( manager );
+				loader.load(url, function ( object ) {
+
+					object.traverse( function ( child ) {
+
+						if ( child instanceof THREE.Mesh ) {
+
+							 child.material = material2;
+
+						}
+
+					} );
+
+					// object.position.y = 0;
+
+					scene.add( object );
+
+				}, onProgress, onError );
+
+		
+
+			var sphereMaterial = new THREE.MeshBasicMaterial( { color: "rgb(115,2,85)", wireframe:false,	opacity:1,
+			transparent:true , side: THREE.DoubleSide});
+			
+
+			var geometry = new THREE.SphereGeometry( 20, 20, 32 );
+			// var sphere = new THREE.Mesh( geometry, sphereMaterial );
+			var sphere = new THREE.Mesh( geometry, sphereMaterial );
+
+			sphere.position.z = 10;
+			sphere.receiveShadow = true;
+			scene.add( sphere );
+
+
+
+			camera.position.z = 5;
+
+			var render = function () {
+
+				var timer = Date.now() * 0.0005;
+
+				camera.position.x = Math.cos( timer ) * 3;
+				camera.position.z = Math.sin( timer ) * 3;
+
+				camera.lookAt( cameraTarget );
+
+				
+
+
+				requestAnimationFrame( render );
+
+				// sphere.rotation.x += 0.01;
+				// object.child.rotation.y += 0.01;
+				//torus.rotation.z += 0.1;
+
+
+				renderer.render(scene, camera);
+
+
+			};
+
+			render();
+
+		}
+
+			function animate() {
+
+				requestAnimationFrame( animate );
+
+				controls.update();
+
+				renderer.render( scene, camera );
+
+			}
+
+
+		</script>
+	</body>
+</html>
