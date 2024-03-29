@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Geolocation Example</title>
+<title>Geolocation Example with Google Maps Link</title>
 <script>
   function getLocation() {
     if ("geolocation" in navigator) {
@@ -20,8 +20,10 @@
   function showPosition(position) {
     var latitude = position.coords.latitude;
     var longitude = position.coords.longitude;
-    document.getElementById("location").innerHTML = "Latitude: " + latitude + "<br>Longitude: " + longitude;
-    // Here you could also send the location to your server using fetch or XMLHttpRequest
+    var locationInfo = "Latitude: " + latitude + "<br>Longitude: " + longitude;
+    var mapsLink = "https://www.google.com/maps/?q=" + latitude + "," + longitude;
+    document.getElementById("location").innerHTML = locationInfo + "<br><a href='" + mapsLink + "' target='_blank'>Open in Google Maps</a>";
+    // The link opens in a new tab thanks to target='_blank'
   }
 
   function showError(error) {
@@ -44,7 +46,7 @@
 </head>
 <body>
 
-<h2>Geolocation Example</h2>
+<h2>Geolocation Example with Google Maps Link</h2>
 <button onclick="getLocation()">Get My Location</button>
 <p id="location"></p>
 
